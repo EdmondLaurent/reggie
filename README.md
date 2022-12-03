@@ -79,7 +79,7 @@ function loginApi(data) {
 
 ### 后端业务代码开发
 
-#### 用户登录第一版
+
 
 用户登录的业务流程如下：
 
@@ -190,9 +190,118 @@ function loginApi(data) {
     }
 ```
 
+## 登录功能过滤器（权限）
 
+### 需求分析与前端代码分析
 
+> 需求分析
 
+当用户未登录直接访问后台首页时，通过拦截器将用户重定向至登录页面
+
+> 前端代码分析
+
+在 request请求的工具包中 **所有的后端响应数据都要经过响应拦截器** 
+
+```javascript
+  service.interceptors.response.use(res => {
+      if (res.data.code === 0 && res.data.msg === 'NOTLOGIN') {// 返回登录页面
+        console.log('---/backend/page/login/login.html---')
+        localStorage.removeItem('userInfo')
+        window.top.location.href = '/backend/page/login/login.html'
+      } else {
+        return res.data
+      }
+    },
+```
+
+当响应的结果 为 error 代码 0 且 后端响应数据的信息 为：NOTLOGIN 时，表示当前用户未登录，跳转回到登陆页面
+
+### 后端业务代码开发
+
+> 业务流程分析：
+
+```
+/*
+1、获取本次请求的URI
+2、判断当前URI是否需要处理
+3、若当前请求内容不需要处理（登录登出，静态页面）则直接放行当前请求
+4、判断当前是否有用户登录的信息，有用户登录信息则直接放行
+5、无用户登录信息则返回没有用户登录的信息
+ */
+```
+
+通过请求过滤器重写 `doFilter` 方法，根据请求的类型和当前session中是否含有用户信息决定是否放行当前请求
+
+过滤器的完整代码为：
+
+```java
+// 定义拦截所有请求的过滤器
+@WebFilter(filterName = "loginCheckFilter", urlPatterns = "/*")
+@Slf4j
+public class loginCheckFilter implements Filter {
+
+    //`Spring core 自带的工具用于检测请求是否与不要被处理的请求路径一致
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
+        HttpServletRequest request = (HttpServletRequest) servletRequest;
+        HttpServletResponse response = (HttpServletResponse) servletResponse;
+        // 1、获取本次请求的URI
+        String requestURI = request.getRequestURI();
+        log.info("拦截到的用户请求：{}", requestURI);
+        //   2、判断当前URI是否需要处理
+        //  2-1、定义不需要被处理的URI列表
+        String[] urls = new String[]{
+                "/employee/login",
+                "/employee/logout",
+                "/backend/**",
+                "/front/**"
+        };
+        //  2-2、判断当前请求是否需要被处理
+        boolean check = checkURI(urls, requestURI);
+        //  3、若当前请求内容不需要处理（登录登出，静态页面）则直接放行当前请求
+        if (check){
+            filterChain.doFilter(request,response);
+            return;     //  放行请求，退出当前方法
+        }
+        //   4、判断当前是否有用户登录的信息，有用户登录信息则直接放行
+        if (request.getSession().getAttribute("employee") != null){
+            filterChain.doFilter(request,response);
+            return;
+        }
+        //  5、无用户登录信息则返回没有用户登录的信息
+        log.info("系统中没有用户登录的信息...");
+        response.getWriter().write(JSON.toJSONString(R.error("NOTLOGIN")));
+    }
+
+    /**
+     * 判断当前请求是否需要被处理，返回check旗帜
+     *
+     * @param urls
+     * @param requestURI
+     * @return
+     */
+    public boolean checkURI(String[] urls, String requestURI) {
+        for (String url : urls) {
+            if (PATH_MATCHER.match(url, requestURI)) {
+                //  请求路径与不需要被处理的路径一致，不需要处理
+                return true;
+            }
+        }
+        return false;
+    }
+}
+```
+
+**注：**
+
+* AntPathMatcher 是 Spring 核心包中提供的工具，在当前项目中的作用是：判断用户发送的请求是否与预定义的不需要处理的请求一致
+* 在当前方法的返回值是 void 时 可以通过 `response.getWriter().write()` 的方法获取输出流 ，向前端返回数据；如：
+
+```java
+ response.getWriter().write(JSON.toJSONString(R.error("NOTLOGIN")));
+```
 
 
 

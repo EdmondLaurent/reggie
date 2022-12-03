@@ -42,7 +42,7 @@
       Promise.reject(error)
   })
 
-  // 响应拦截器
+  // 响应拦截器（所有后端显响应的数据都要经过响应拦截器）
   service.interceptors.response.use(res => {
       if (res.data.code === 0 && res.data.msg === 'NOTLOGIN') {// 返回登录页面
         console.log('---/backend/page/login/login.html---')

@@ -480,13 +480,168 @@ public class GlobalExceptionHandler {
 
 * @ExceptionHandler(SQLIntegrityConstraintViolationException.class) 表示捕获指定的异常信息并进行处理
 
+## 员工信息分页查询
 
+### 需求与前端代码分析
 
+> 需求分析
 
+```
+1.前端发送 Ajax请求 并附带分页参数
+2.服务端通过controller接收请求（页面提交的数据）并通过调用 service查询
+3.将查询到的结果返回给前端
+4.接收到后端的数据通过 ELUI 渲染到对应的表格中、
+```
 
+> 前端代码分析
 
+用户进入首页后 main 详情页面自动跳转到 list 页面
 
+```javascript
+        created() {
+          this.init()
+          this.user = JSON.parse(localStorage.getItem('userInfo')).username
+        },
+```
 
+在 list 员工管理页面的vue对象 加载时会调用init
+
+```javascript
+          async init () {
+            const params = {
+              page: this.page,
+              pageSize: this.pageSize,
+              name: this.input ? this.input : undefined
+            }
+            await getMemberList(params).then(res => {
+              if (String(res.code) === '1') {
+                this.tableData = res.data.records || []
+                this.counts = res.data.total
+              }
+            }).catch(err => {
+              this.$message.error('请求出错了：' + err)
+            })
+          },
+```
+
+首先构建分页参数；然后通过 await 调用getMemberList 方法向后端发送请求
+
+```javascript
+function getMemberList (params) {
+  return $axios({
+    url: '/employee/page',
+    method: 'get',
+    params
+  })
+}
+```
+
+发送的请求为：`http://localhost:8080/employee/page?page=1&pageSize=10`
+
+通过拦截器（前端拦截器）将参数与url进行拼接
+
+```javascript
+// request拦截器
+  service.interceptors.request.use(config => {
+
+    // get请求映射params参数
+    if (config.method === 'get' && config.params) {
+      let url = config.url + '?';
+      for (const propName of Object.keys(config.params)) {
+        const value = config.params[propName];
+        var part = encodeURIComponent(propName) + "=";
+        if (value !== null && typeof(value) !== "undefined") {
+          if (typeof value === 'object') {
+            for (const key of Object.keys(value)) {
+              let params = propName + '[' + key + ']';
+              var subPart = encodeURIComponent(params) + "=";
+              url += subPart + encodeURIComponent(value[key]) + "&";
+            }
+          } else {
+            url += part + encodeURIComponent(value) + "&";
+          }
+        }
+      }
+      url = url.slice(0, -1);
+      config.params = {};
+      config.url = url;
+    }
+    return config
+  }, error => {
+      console.log(error)
+      Promise.reject(error)
+  })
+```
+
+### 后端业务代码开发
+
+**在使用MP 进行分页查询之前， 需要构建MP的分页查询配置类**
+
+流程如下：
+
+```
+1. 初始化MP拦截器
+2. 将分页拦截器添加到拦截器内部
+3. 返回当前拦截器
+```
+
+代码：
+
+```java
+/**
+ * MP 分页配置类
+ * 配置MP 分页信息
+ */
+@Configuration
+public class MybatisPlusPageConfig {
+    //  MP 的分页是通过拦截器实现的
+    @Bean
+    public MybatisPlusInterceptor mybatisPlusInterceptor() {
+        //  1. 初始化MP拦截器
+        MybatisPlusInterceptor mybatisPlusInterceptor = new MybatisPlusInterceptor();
+        //  2. 将分页拦截器添加到拦截器内部
+        mybatisPlusInterceptor.addInnerInterceptor(new PaginationInnerInterceptor());
+        //  3. 返回当前拦截器
+        return mybatisPlusInterceptor;
+    }
+}
+```
+
+分页查询的业务逻辑为：
+
+```
+1.从请求中获取分页参数
+2.构建分页构造器
+3.构建查询条件构造器
+4.执行查询条件
+```
+
+代码如下：
+
+```java
+    /**
+     * 分页查询员工，根据条件模糊查询员工信息（分页）接口
+     *
+     * @param page
+     * @param pageSize
+     * @param name
+     * @return
+     */
+    @GetMapping("/page")
+    public R<Page> page(int page, int pageSize, String name) {
+        // 1. 接收参数
+        log.info("用户分页查询，前端传递的参数：页码：{}，每页大小：{}，模糊查询用户名称：{}", page, pageSize, name);
+        //  2. 构建分页构造器
+        Page<Employee> pageInfo = new Page<>(page, pageSize);
+        //  3. 构建条件构造器
+        LambdaQueryWrapper<Employee> queryWrapper = new LambdaQueryWrapper<>();
+        //  第一个参数：apache工具判断String 是否为空 第二个参数 :通过对象反射获取表中对应的column 第三个参数：要查询的参数值
+        queryWrapper.like(StringUtils.isNotEmpty(name), Employee::getName, name);
+        queryWrapper.orderByDesc(Employee::getUpdateTime);      //  根据修改时间倒序排序
+        employeeService.page(pageInfo, queryWrapper);        //  不需要用返回值接收，page 查询的结果会自动封装在 pageInfo对象中
+        return R.success(pageInfo);
+    }
+```
 
 # 问题记录
 
@@ -512,10 +667,3 @@ $ git config --global --unset-all remote.origin.proxy
 
 [git - fatal: unable to access 'https://github.com/xxx': OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to github.com:443 - Stack Overflow](https://stackoverflow.com/questions/49345357/fatal-unable-to-access-https-github-com-xxx-openssl-ssl-connect-ssl-error?rq=1)
 
-
-
-
-
-# 杂事儿
-
-13912345678

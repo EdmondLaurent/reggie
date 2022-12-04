@@ -1,16 +1,15 @@
 package com.edmond.reggie.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.edmond.reggie.common.R;
 import com.edmond.reggie.entity.Employee;
 import com.edmond.reggie.service.EmployeeService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.DigestUtils;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
@@ -95,5 +94,28 @@ public class EmployeeController {
         //  4、 调用 save 方法接口将对象存储到数据库中
         employeeService.save(employee);
         return R.success("新增员工成功");
+    }
+
+    /**
+     * 分页查询员工，根据条件模糊查询员工信息（分页）接口
+     *
+     * @param page
+     * @param pageSize
+     * @param name
+     * @return
+     */
+    @GetMapping("/page")
+    public R<Page> page(int page, int pageSize, String name) {
+        // 1. 接收参数
+        log.info("用户分页查询，前端传递的参数：页码：{}，每页大小：{}，模糊查询用户名称：{}", page, pageSize, name);
+        //  2. 构建分页构造器
+        Page<Employee> pageInfo = new Page<>(page, pageSize);
+        //  3. 构建条件构造器
+        LambdaQueryWrapper<Employee> queryWrapper = new LambdaQueryWrapper<>();
+        //  第一个参数：apache工具判断String 是否为空 第二个参数 :通过对象反射获取表中对应的column 第三个参数：要查询的参数值
+        queryWrapper.like(StringUtils.isNotEmpty(name), Employee::getName, name);
+        queryWrapper.orderByDesc(Employee::getUpdateTime);      //  根据修改时间倒序排序
+        employeeService.page(pageInfo, queryWrapper);        //  不需要用返回值接收，page 查询的结果会自动封装在 pageInfo对象中
+        return R.success(pageInfo);
     }
 }

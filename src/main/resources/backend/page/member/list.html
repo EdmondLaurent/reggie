@@ -154,6 +154,8 @@
            // 添加
           addMemberHandle (st) {
             if (st === 'add'){
+              //  调用 index 页面的切换详情页方法 将参数中的 url 赋值给详情页属性url
+              //  目的是在主界面切换对应的显示内容
               window.parent.menuHandle({
                 id: '2',
                 url: '/backend/page/member/add.html',

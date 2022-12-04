@@ -1,7 +1,6 @@
 package com.edmond.reggie.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.edmond.reggie.common.R;
 import com.edmond.reggie.entity.Employee;
 import com.edmond.reggie.service.EmployeeService;
@@ -15,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 
 /**
  * 员工接口
@@ -70,5 +70,30 @@ public class EmployeeController {
         request.getSession().removeAttribute("employee");
         //  2. 返回退出成功的结果
         return R.success("当前用户退出成功");
+    }
+
+    /**
+     * 新增用户
+     *
+     * @param request
+     * @param employee
+     * @return
+     */
+    @PostMapping
+    public R<String> saveUser(HttpServletRequest request, @RequestBody Employee employee) {
+        //  1、接收参数 -- 转换成 Employee对象
+        log.info("新增用户；接收的参数：{}", employee);
+        // 2、设置默认密码
+        employee.setPassword(DigestUtils.md5DigestAsHex("123456".getBytes(StandardCharsets.UTF_8)));
+        // 3、填充其他属性
+        employee.setCreateTime(LocalDateTime.now());    //  LocalDateTime.now() 获取当前系统时间
+        employee.setUpdateTime(LocalDateTime.now());
+        //  在session中获取当前登录用户的id
+        Long employeeId = (Long) request.getSession().getAttribute("employee");
+        employee.setCreateUser(employeeId);
+        employee.setUpdateUser(employeeId);
+        //  4、 调用 save 方法接口将对象存储到数据库中
+        employeeService.save(employee);
+        return R.success("新增员工成功");
     }
 }

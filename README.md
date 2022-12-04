@@ -173,7 +173,7 @@ function loginApi(data) {
           },
 ```
 
-### 退出功能代码开发
+### 后端业务代码开发
 
 > 需求分析：
 
@@ -294,7 +294,7 @@ public class loginCheckFilter implements Filter {
 }
 ```
 
-**注：**
+#### TIPS
 
 * AntPathMatcher 是 Spring 核心包中提供的工具，在当前项目中的作用是：判断用户发送的请求是否与预定义的不需要处理的请求一致
 * 在当前方法的返回值是 void 时 可以通过 `response.getWriter().write()` 的方法获取输出流 ，向前端返回数据；如：
@@ -303,13 +303,186 @@ public class loginCheckFilter implements Filter {
  response.getWriter().write(JSON.toJSONString(R.error("NOTLOGIN")));
 ```
 
+## 新增员工功能
+
+### 需求与前端代码分析
+
+> 需求分析
+
+用户点击新增员工按钮 ---> 跳转到新增员工页面 ---> 填写后台用户（员工）信息表单（注意是否启用属性）
+
+用户提交表单后在 `employee` 表中新增关于员工的数据
+
+特殊字段： 
+
+username : 有唯一约束，用户通过用户名进行登录
+
+status：当前账户是否启用，0表示禁用 1表示启用
+
+> 前端代码分析
+
+当用户前往index.html 主页的时候 在右侧的内容详情页 默认前往的就是员工管理详情页面
+
+```html
+          <div class="app-main" v-loading="loading">
+            <div class="divTmp" v-show="loading"></div>
+            <iframe
+              id="cIframe"
+              class="c_iframe"
+              name="cIframe"
+              :src="iframeUrl"	<---------  这个属性表示当前嵌入的页面URL
+              width="100%"
+              height="auto"
+              frameborder="0"
+              v-show="!loading"
+            ></iframe>
+          </div>
+        </div>
+      </div>
+```
+
+iframeUrl 在 index 页面 vue 对象的 data 域中 默认属性是 员工管理详情页
+
+```javascript
+iframeUrl: 'page/member/list.html',
+```
+
+用户点击其他页面的链接时 变更这个属性的 URL 值即可
+
+在员工管理界面 当用户点击 `添加员工` 按钮之后 触发页面跳转 
+
+主页面会显示添加员工的表单信息：
+
+```javascript
+           // 添加
+          addMemberHandle (st) {
+            if (st === 'add'){
+              //  调用 index 页面的切换详情页方法 将参数中的 url 赋值给详情页属性url
+              //  目的是在主界面切换对应的显示内容
+              window.parent.menuHandle({
+                id: '2',
+                url: '/backend/page/member/add.html',
+                name: '添加员工'
+              },true)
+            } else {
+              window.parent.menuHandle({
+                id: '2',
+                url: '/backend/page/member/add.html?id='+st,
+                name: '修改员工'
+              },true)
+            }
+          },
+```
+
+切换详情页面的方法：
+
+```javascript
+          menuHandle(item, goBackFlag) {
+            this.loading = true
+            this.menuActived = item.id
+            this.iframeUrl = item.url   <------ 将参数值中的 url 复制给当前vue对象data域中的url属性达到切换页面的效果
+            this.headTitle = item.name
+            this.goBackFlag = goBackFlag
+            this.closeLoading()
+          },
+```
+
+### 后端业务代码开发
+
+> 需求分析
+
+```
+1、接收到请求参数 json 字符串（转为Employee对象）
+2、设置默认密码
+3、填充其他属性
+4、调用 save 方法接口将对象存储到数据库中
+```
+
+代码详情如下：
+
+```java
+    @PostMapping
+    public R<String> saveUser(HttpServletRequest request, @RequestBody Employee employee) {
+        //  1、接收参数 -- 转换成 Employee对象
+        log.info("新增用户；接收的参数：{}", employee);
+        // 2、设置默认密码
+        employee.setPassword(DigestUtils.md5DigestAsHex("123456".getBytes(StandardCharsets.UTF_8)));
+        // 3、填充其他属性
+        employee.setCreateTime(LocalDateTime.now());    //  LocalDateTime.now() 获取当前系统时间
+        employee.setUpdateTime(LocalDateTime.now());
+        //  在session中获取当前登录用户的id
+        Long employeeId = (Long) request.getSession().getAttribute("employee");
+        employee.setCreateUser(employeeId);
+        employee.setUpdateUser(employeeId);
+        //  4、调用 save 方法接口将对象存储到数据库中
+        employeeService.save(employee);
+        return R.success("新增员工成功");
+    }
+```
+
+#### TIPS
+
+* LocalDateTime.now() 获取当前系统时间
+* DigestUtils.md5DigestAsHex()  Sprnig core 中提供的工具类；作用是将密码进行MD5加密；参数是byte数组
+
+### 异常处理器业务要求与开发
+
+由于设置了username字段的唯一约束；当新增的员工账号（username）字段发生重复时，会出现如下错误：
+
+```java
+ Duplicate entry 'zhangsan' for key 'idx_username'; nested exception is java.sql.SQLIntegrityConstraintViolationException: Duplicate entry 'zhangsan' for key 'idx_username'] with root cause
+```
+
+所以需要对错误进行捕获和处理；
+
+**新增全局异常处理器；（通过代理的方式处理所有请求）；用于捕获和处理程序在运行过程中出现的所有异常**
+
+```
+1、若抛出用户名重复的异常，在异常信息中获取重复的用户名字段
+2、若不是因为这个异常则抛出未知的错误
+```
+
+代码详情如下：
+
+```java
+@ControllerAdvice(annotations = {RestController.class, Controller.class})
+//  所有在类名上含有 Controller 和 RestController 的方法都会被捕获
+@ResponseBody
+@Slf4j
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理异常的方法（通过反射获取异常信息）
+     *
+     * @param exception
+     * @return
+     */
+    @ExceptionHandler(SQLIntegrityConstraintViolationException.class)
+    public R<String> exceptionHandler(SQLIntegrityConstraintViolationException exception) {
+        log.error(exception.getMessage());
+        //  1、若抛出用户名重复的异常，在异常信息中获取重复的用户名字段
+        if (exception.getMessage().contains("Duplicate entry")) {
+            String[] split = exception.getMessage().split(" ");
+            String exMsg = "当前系统中已存在用户：" + split[2];
+            return R.error(exMsg);
+        }
+        //  2、若不是因为这个异常则抛出未知的错误
+        return R.error("运行时出现了未知的错误...");
+    }
+
+}
+
+```
+
+#### TIPS
+
+* @ControllerAdvice(annotations = {RestController.class, Controller.class}) 代表拦截所有类上带有 @Controller 和 @RestController的注解 的网络请求，参数是对应Controller 的class 组成的数组
+
+* @ExceptionHandler(SQLIntegrityConstraintViolationException.class) 表示捕获指定的异常信息并进行处理
 
 
 
 
-# 知识内容补充   
-
-> 1. Mybatis-Plus  @TableField(fill = FieldFill.INSERT) 注解作用 
 
 
 
@@ -339,3 +512,10 @@ $ git config --global --unset-all remote.origin.proxy
 
 [git - fatal: unable to access 'https://github.com/xxx': OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to github.com:443 - Stack Overflow](https://stackoverflow.com/questions/49345357/fatal-unable-to-access-https-github-com-xxx-openssl-ssl-connect-ssl-error?rq=1)
 
+
+
+
+
+# 杂事儿
+
+13912345678

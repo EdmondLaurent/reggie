@@ -118,4 +118,39 @@ public class EmployeeController {
         employeeService.page(pageInfo, queryWrapper);        //  不需要用返回值接收，page 查询的结果会自动封装在 pageInfo对象中
         return R.success(pageInfo);
     }
+
+    /**
+     * 更新用户status状态（启用或禁用对应的用户账号）
+     *
+     * @param employee
+     * @param request
+     * @return
+     */
+    @PutMapping
+    public R<String> updateStatus(@RequestBody Employee employee, HttpServletRequest request) {
+        //  1. 将参数封装成Employee 对象
+        log.info("修改状态的用户 id：{}，修改后的用户账户状态：{}", employee.getId(), employee.getStatus());
+        //  2.填充属性  （当前用户id 更改时间）
+        Long empId = (Long) request.getSession().getAttribute("employee");
+        employee.setUpdateUser(empId);
+        employee.setUpdateTime(LocalDateTime.now());
+        //  3. 调用 MP 相关接口 更改status 字段内容
+        employeeService.updateById(employee);
+        return R.success("用户信息更成功...");
+    }
+
+    /**
+     * 根据 id 查询 员工信息
+     *
+     * @param id
+     * @return
+     */
+    @GetMapping("/{id}")
+    public R<Employee> getEmpById(@PathVariable Long id) {
+        Employee employee = employeeService.getById(id);
+        if (employee != null) {
+            return R.success(employee);
+        }
+        return R.error("未查询到当前用户信息...");
+    }
 }

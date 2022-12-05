@@ -643,6 +643,177 @@ public class MybatisPlusPageConfig {
     }
 ```
 
+## 启用|禁用员工账号
+
+ ### 需求与前端代码分析
+
+> 前端代码分析
+
+禁用员工账号动态显示的功能，在员工管理页面的vue对象加载的时候，从当前浏览器的本地存储中获取当前登录对象的用户名；
+
+```javascript
+        created() {
+          this.init()
+            //	获取当前登录用户的用户名
+          this.user = JSON.parse(localStorage.getItem('userInfo')).username
+        },
+```
+
+在对应按钮标签的位置，通过 v-if 语句判断是否显示当前按钮 
+
+```html
+<el-button
+              type="text"
+              size="small"
+              class="delBut non"
+              @click="statusHandle(scope.row)"
+              v-if="user === 'admin'"
+            >
+              {{ scope.row.status == '1' ? '禁用' : '启用' }}
+            </el-button>
+```
+
+调用状态修改的方法像后端发送请求：
+
+```javascript
+          //状态修改
+          statusHandle (row) {
+            this.id = row.id
+            this.status = row.status
+            this.$confirm('确认调整该账号的状态?', '提示', {
+              'confirmButtonText': '确定',
+              'cancelButtonText': '取消',
+              'type': 'warning'
+              }).then(() => {
+              enableOrDisableEmployee({ 'id': this.id, 'status': !this.status ? 1 : 0 }).then(res => {
+                console.log('enableOrDisableEmployee',res)
+                if (String(res.code) === '1') {
+                  this.$message.success('账号状态更改成功！')
+                  this.handleQuery()
+                }
+              }).catch(err => {
+                this.$message.error('请求出错了：' + err)
+              })
+            })
+          },
+```
+
+其中 状态 status 传递的参数为三元运算表达式 ：`'status': !this.status ? 1 : 0 `
+
+当前用户状态为 启用 （true）时 !this.status 返回false  在请求中传递的数字为 0 （后端接收到请求之后将当前数字改为 0 即可）
+
+当前用户状态为 禁用 （false）时 !this,status 返回 true 向后端请求的数字为 1 在数据库中将 status字段改为1 即可
+
+发送请求的 axios 方法：
+
+```javascript
+function enableOrDisableEmployee (params) {
+  return $axios({
+    url: '/employee',
+    method: 'put',
+    data: { ...params }
+  })
+}
+```
+
+### 后端业务代码开发
+
+当用户点击 `启用|禁用` 按钮时 修改数据库中存储的status字段
+
+1. 将接收的参数封装成Employee 对象 
+2. 填充 Employee 对象属性
+3. 调用 MP 更新方法更新数据库中的字段内容
+
+## 编辑员工信息
+
+1. 用户点击编辑按钮 跳转到公用的新增页面（add.html）
+2. 前端通过请求中是否存在用户 id 判断当前页面是新增还是修改信息
+3. 修改信息 ：发送Ajax请求 携带用户 id 后端查询到对应的信息后返回
+4. 当用户点击"保存"按钮时 复用 修改状态的方法 更改对应的字段
+
+### 需求与前端代码分析
+
+> 前端代码分析
+
+因为 编辑员工与 新增员工用的是同一个 add.html 页面 通过 请求 url 中是否存在 id 值判断当前页面的功能是新增还是修改
+
+```javascript
+        created() {
+          this.id = requestUrlParam('id')
+          this.actionType = this.id ? 'edit' : 'add'
+          if (this.id) {
+            this.init()
+          }
+        },
+```
+
+获取请求参数中的 id 值
+
+```javascript
+//获取url地址上面的参数
+function requestUrlParam(argname){
+  var url = location.href
+  var arrStr = url.substring(url.indexOf("?")+1).split("&")
+  for(var i =0;i<arrStr.length;i++)
+  {
+      var loc = arrStr[i].indexOf(argname+"=")
+      if(loc!=-1){
+          return arrStr[i].replace(argname+"=","").replace("?","")
+      }
+  }
+  return ""
+}
+
+```
+
+若当前页面的功能是修改员工信息 则发送异步请求 到后端进行用户查询与数据回显
+
+```javascript
+          async init () {
+            queryEmployeeById(this.id).then(res => {
+              console.log(res)
+              if (String(res.code) === '1') {
+                console.log(res.data)
+                this.ruleForm = res.data
+                this.ruleForm.sex = res.data.sex === '0' ? '女' : '男'
+                // this.ruleForm.password = ''
+              } else {
+                this.$message.error(res.msg || '操作失败')
+              }
+            })
+          },
+```
+
+当重新提交用户信息时，发送的请求是：
+
+复用修改状态的后端代码
+
+### 后端业务代码开发
+
+1. 查询数据回显到前端页面，将数据返回给前端
+2. 更改的代码服用的修改状态的代码（不用修改）
+
+查询数据并返回 -- 后端代码
+
+```java
+    /**
+     * 根据 id 查询 员工信息
+     *
+     * @param id
+     * @return
+     */
+    @GetMapping("/{id}")
+    public R<Employee> getEmpById(@PathVariable Long id) {
+        Employee employee = employeeService.getById(id);
+        if (employee != null) {
+            return R.success(employee);
+        }
+        return R.error("未查询到当前用户信息...");
+    }
+```
+
+
+
 # 问题记录
 
 ## Git SSL 错误问题
@@ -666,4 +837,99 @@ $ git config --global --unset-all remote.origin.proxy
 参考：
 
 [git - fatal: unable to access 'https://github.com/xxx': OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to github.com:443 - Stack Overflow](https://stackoverflow.com/questions/49345357/fatal-unable-to-access-https-github-com-xxx-openssl-ssl-connect-ssl-error?rq=1)
+
+## 自定义消息转换器解JavaScript页面精度问题
+
+在根据 id 更改用户状态时 发现 JavaScript 传递的 id 只能精确到 16 位（**当前系统中的用户id为19位**）会导致精度丢失的问题 ，从而匹配不上对应的 id 
+
+```sql
+==>  Preparing: UPDATE employee SET status=?, update_time=?, update_user=? WHERE id=?
+==> Parameters: 0(Integer), 2022-12-05T20:35:50.264(LocalDateTime), 1(Long), 1599246659756494800(Long)
+<==    Updates: 0
+```
+
+从而导致根据id 查询用户信息失败；无法完成状态修改
+
+> 解决方案：自定义消息转换器，将需要返回到前端的Long 类型转换 为 String 类型
+
+1. 新建自定义对象转换器
+2. 将自定义对象转换器 引入 Web MVC 并将索引值设置为 最低 0 替代 Spring MVC 中使用的默认对象转换器
+
+* * 新建消息转换器对象
+  * 设置对象转换器底层使用 Jackson 将Java对象转换为json
+  * 设置自定义消息转换器的 index索引值为 0 （最低：优先使用）将自定义的消息转换器添加到MVC框架的消息转换器集合中
+
+消息转换器作用：
+
+完成 Java对象与 Json 字符串之间的映射 ；将统一返回结果 R 对象转换成功 Json 字符串并相应给前端页面
+
+自定义对象映射代码如下：
+
+1.新建自定义消息转换器
+
+```java
+/**
+ * 对象映射器:基于jackson将Java对象转为json，或者将json转为Java对象
+ * 将JSON解析为Java对象的过程称为 [从JSON反序列化Java对象]
+ * 从Java对象生成JSON的过程称为 [序列化Java对象到JSON]
+ */
+public class JacksonObjectMapper extends ObjectMapper {
+
+    public static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static final String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    public static final String DEFAULT_TIME_FORMAT = "HH:mm:ss";
+
+    public JacksonObjectMapper() {
+        super();
+        //收到未知属性时不报异常
+        this.configure(FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        //反序列化时，属性不存在的兼容处理
+        this.getDeserializationConfig().withoutFeatures(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
+
+        SimpleModule simpleModule = new SimpleModule()
+                .addDeserializer(LocalDateTime.class, new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_TIME_FORMAT)))
+                .addDeserializer(LocalDate.class, new LocalDateDeserializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)))
+                .addDeserializer(LocalTime.class, new LocalTimeDeserializer(DateTimeFormatter.ofPattern(DEFAULT_TIME_FORMAT)))
+
+                .addSerializer(BigInteger.class, ToStringSerializer.instance)
+                .addSerializer(Long.class, ToStringSerializer.instance)// Long 类型 在转换成Json 字符串的时候自动映射为String
+                .addSerializer(LocalDateTime.class, new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_TIME_FORMAT)))
+                .addSerializer(LocalDate.class, new LocalDateSerializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)))
+                .addSerializer(LocalTime.class, new LocalTimeSerializer(DateTimeFormatter.ofPattern(DEFAULT_TIME_FORMAT)));
+
+        //注册功能模块 例如，可以添加自定义序列化器和反序列化器
+        this.registerModule(simpleModule);
+    }
+}
+```
+
+2. 将自定义消息转换器添加到消息转换器容器中
+
+```java
+    /**
+     * 扩展消息转换器对象
+     * 引入自定义的消息转换器
+     * 该方法在项目初始化阶段执行
+     *
+     * @param converters
+     */
+    @Override
+    protected void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+        log.info("扩展当前的消息转换器...");
+        //  1. 新建消息转换器
+        MappingJackson2HttpMessageConverter messageConverter = new MappingJackson2HttpMessageConverter();
+        //  2. 设置底层的消息转换器为 自定义对象转换器
+        messageConverter.setObjectMapper(new JacksonObjectMapper());
+        //  3. 将新增的消息转换器添加到 MVC 消息转化器容器中
+        converters.add(0,messageConverter);	//	注意第一个参数是 index 使用消息转换器的优先级
+    }
+```
+
+
+
+
+
+
 

@@ -1,6 +1,7 @@
 package com.edmond.reggie.filter;
 
 import com.alibaba.fastjson.JSON;
+import com.edmond.reggie.common.BaseContext;
 import com.edmond.reggie.common.R;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.AntPathMatcher;
@@ -16,7 +17,7 @@ import java.io.IOException;
 @Slf4j
 public class loginCheckFilter implements Filter {
 
-    //`Spring core 自带的工具用于检测请求是否与不要被处理的请求路径一致
+    //Spring core 自带的工具用于检测请求是否与不要被处理的请求路径一致
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
     @Override
@@ -43,6 +44,8 @@ public class loginCheckFilter implements Filter {
         }
         //   4、判断当前是否有用户登录的信息，有用户登录信息则直接放行
         if (request.getSession().getAttribute("employee") != null){
+            //  将当前用户的登录信息封装在 ThreadLocal 对象中
+            BaseContext.setCurrentId((Long) request.getSession().getAttribute("employee"));
             filterChain.doFilter(request,response);
             return;
         }

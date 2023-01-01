@@ -85,12 +85,12 @@ public class EmployeeController {
         // 2、设置默认密码
         employee.setPassword(DigestUtils.md5DigestAsHex("123456".getBytes(StandardCharsets.UTF_8)));
         // 3、填充其他属性
-        employee.setCreateTime(LocalDateTime.now());    //  LocalDateTime.now() 获取当前系统时间
-        employee.setUpdateTime(LocalDateTime.now());
-        //  在session中获取当前登录用户的id
-        Long employeeId = (Long) request.getSession().getAttribute("employee");
-        employee.setCreateUser(employeeId);
-        employee.setUpdateUser(employeeId);
+//        employee.setCreateTime(LocalDateTime.now());    //  LocalDateTime.now() 获取当前系统时间
+//        employee.setUpdateTime(LocalDateTime.now());
+//        //  在session中获取当前登录用户的id
+//        Long employeeId = (Long) request.getSession().getAttribute("employee");
+//        employee.setCreateUser(employeeId);
+//        employee.setUpdateUser(employeeId);
         //  4、 调用 save 方法接口将对象存储到数据库中
         employeeService.save(employee);
         return R.success("新增员工成功");
@@ -131,9 +131,9 @@ public class EmployeeController {
         //  1. 将参数封装成Employee 对象
         log.info("修改状态的用户 id：{}，修改后的用户账户状态：{}", employee.getId(), employee.getStatus());
         //  2.填充属性  （当前用户id 更改时间）
-        Long empId = (Long) request.getSession().getAttribute("employee");
-        employee.setUpdateUser(empId);
-        employee.setUpdateTime(LocalDateTime.now());
+//        Long empId = (Long) request.getSession().getAttribute("employee");
+//        employee.setUpdateUser(empId);
+//        employee.setUpdateTime(LocalDateTime.now());
         //  3. 调用 MP 相关接口 更改status 字段内容
         employeeService.updateById(employee);
         return R.success("用户信息更成功...");

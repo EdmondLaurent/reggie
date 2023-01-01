@@ -4,13 +4,31 @@
 
 ## 数据库环境搭建
 
-<img src="F:\new_work_study_space\瑞吉外卖资料\# 瑞吉外卖开发笔记.assets\image-20221203085549112.png" alt="image-20221203085549112" style="zoom:50%;" />、
+执行资源文件中的sql 脚本 `db_reggie.sql` 
 
+在当前项目中配置以下信息：
 
-
-## maven环境搭建
-
-
+```yaml
+server:
+  port: 8080
+spring:
+  application:
+    name: reggie_take_out
+  datasource:
+    druid:
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      url: jdbc:mysql://localhost:3306/reggie?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+      username: root
+      password: 1018
+mybatis-plus:
+  configuration:
+    #在映射实体或者属性时，将数据库中表名和字段名中的下划线去掉，按照驼峰命名法映射
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID
+```
 
 # 功能开发
 
@@ -78,8 +96,6 @@ function loginApi(data) {
 ```
 
 ### 后端业务代码开发
-
-
 
 用户登录的业务流程如下：
 
@@ -724,6 +740,30 @@ function enableOrDisableEmployee (params) {
 2. 填充 Employee 对象属性
 3. 调用 MP 更新方法更新数据库中的字段内容
 
+当前方法接收的参数是json 字符串存储的用户信息 使用 MP `updateById` 根据 id 修改的 API 即可修改整行数据库的不同的字段信息 ； 这个方法不只是可以修改状态 也可以修改其他属性
+
+```java
+    /**
+     * 更新用户status状态（启用或禁用对应的用户账号）
+     *
+     * @param employee
+     * @param request
+     * @return
+     */
+    @PutMapping
+    public R<String> updateStatus(@RequestBody Employee employee, HttpServletRequest request) {
+        //  1. 将参数封装成Employee 对象
+        log.info("修改状态的用户 id：{}，修改后的用户账户状态：{}", employee.getId(), employee.getStatus());
+        //  2.填充属性  （当前用户id 更改时间）
+        Long empId = (Long) request.getSession().getAttribute("employee");
+        employee.setUpdateUser(empId);
+        employee.setUpdateTime(LocalDateTime.now());
+        //  3. 调用 MP 相关接口 更改status 字段内容
+        employeeService.updateById(employee);
+        return R.success("用户信息更成功...");
+    }
+```
+
 ## 编辑员工信息
 
 1. 用户点击编辑按钮 跳转到公用的新增页面（add.html）
@@ -811,6 +851,181 @@ function requestUrlParam(argname){
         return R.error("未查询到当前用户信息...");
     }
 ```
+
+在根据 id 查询到对应的用户之后 调用修改用户账号状态的代码（修改当前对象对应信息的不同字段）
+
+## 公共字段自动填充
+
+### 优化需求分析
+
+在新增或者修改员工信息时，每次操作都需要在代码层面填充一些公用的字段 （比如：`create_time` ,`update_user` 之类的）
+
+需求：对于这些不同数据表中的共用字段做统一处理，使用MP 提供的共用字段自动填充的功能
+
+> 🐱‍🐉MP 公用字段自动填充介绍：
+
+公用字段自动填充，也就是在插入或更新信息时为特定的字段赋值，使用公用字段可以避免重复代码
+
+实现步骤：
+
+1. 在实体类属性上新增 @TableField 注解 ，指定 自动填充的策略
+2. 在自动填充策略中编写数据对象处理器，在这个处理器类中统一为公用字段赋值
+
+❓ **现在出现的问题是 在给 `createUser` , `updateUser` 字段赋值时 当前自定义的数据对象处理器中无法获取 request 对象或者获取session , 那么如何获取 当前系统的登录用户 id 信息呢？**
+
+✔ 使用 ThreadLocal 对象进行处理 通过自定义工具类将用户登录的id 保存在 ThreadLocal 对象中
+
+> ThreadLocal 对象介绍
+
+客户每次发送用户请求时 对应的服务端都会分配一个新的线程来处理，也就是说在单个用户登录后的操作都属于一个线程管理
+
+ `ThreadLocal`  是JDK 针对单个线程提供的一个类 
+
+我们可以将用户的id信息存储在ThreadLocal对象中，在填充数据的时候 ，通过`get()`方法从 ThreadLocal 对象中获取即可
+
+### 代码实现
+
+在实体类上新增 @TableField 注解，指定自动填充的方式，修改后的实体类字段
+
+```java
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createTime;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updateTime;
+
+    @TableField(fill = FieldFill.INSERT)
+    private Long createUser;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private Long updateUser;
+```
+
+将对应 controller 中填充 员工公用字段的属性的代码注释
+
+在 `common` 包下编写 工具类 `BaseContext` 工具类实现将登录用户的 id 存储到  ThreadLocal 对象中
+
+```java
+public class BaseContext {
+
+    private static ThreadLocal<Long> threadLocal = new ThreadLocal<>();
+
+    /**
+     * 设置当前用户id
+     */
+    public static void setCurrentId(Long id) {
+        threadLocal.set(id);
+    }
+
+    /**
+     * 获取当前登登录的用户 id
+     * @return
+     */
+    public static Long getCurrentId() {
+        return threadLocal.get();
+    }
+}
+
+```
+
+自动填充字段的数据对象处理器，填充对应的字段信息：
+
+```java
+@Slf4j
+@Component
+public class MyMetaObjectHandler implements MetaObjectHandler {
+
+    /**
+     * 新增阶段填充共用字段
+     *
+     * @param metaObject
+     */
+    @Override
+    public void insertFill(MetaObject metaObject) {
+        log.info("新增阶段填充共用字段...");
+        log.info("当前线程为：{}",Thread.currentThread().getId());
+        metaObject.setValue("createTime", LocalDateTime.now());
+        metaObject.setValue("createUser", BaseContext.getCurrentId());
+        metaObject.setValue("updateTime", LocalDateTime.now());
+        metaObject.setValue("updateUser", BaseContext.getCurrentId());
+    }
+
+    /**
+     * 更新阶段填充公用字段
+     *
+     * @param metaObject
+     */
+    @Override
+    public void updateFill(MetaObject metaObject) {
+        log.info("修改阶段填充共用字段...");
+        log.info("当前线程为：{}",Thread.currentThread().getId());
+        metaObject.setValue("updateTime", LocalDateTime.now());
+        metaObject.setValue("updateUser", BaseContext.getCurrentId());
+    }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### TIPS
+
+ThreadLocal 对象获取当前线程信息
+
+* ThreadLocal 对象概念与介绍：
+
+<img src="README.assets/image-20230101132530540.png" alt="image-20230101132530540" style="zoom:50%;" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 菜品分类功能
 
 
 
@@ -926,8 +1141,6 @@ public class JacksonObjectMapper extends ObjectMapper {
         converters.add(0,messageConverter);	//	注意第一个参数是 index 使用消息转换器的优先级
     }
 ```
-
-
 
 
 

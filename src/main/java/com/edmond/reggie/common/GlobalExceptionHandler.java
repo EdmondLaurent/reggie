@@ -24,10 +24,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(SQLIntegrityConstraintViolationException.class)
     public R<String> exceptionHandler(SQLIntegrityConstraintViolationException exception) {
         log.error(exception.getMessage());
-        //  1、若抛出用户名重复的异常，在异常信息中获取重复的用户名字段
+        //  1、处理 捕获到的sql唯一约束异常并进行统一处理
         if (exception.getMessage().contains("Duplicate entry")) {
             String[] split = exception.getMessage().split(" ");
-            String exMsg = "当前系统中已存在用户：" + split[2];
+            String exMsg = "当前系统中已存在：" + split[2];
             return R.error(exMsg);
         }
         //  2、若不是因为这个异常则抛出未知的错误

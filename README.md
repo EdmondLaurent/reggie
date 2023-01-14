@@ -965,20 +965,6 @@ public class MyMetaObjectHandler implements MetaObjectHandler {
 }
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ### TIPS
 
 ThreadLocal 对象获取当前线程信息
@@ -991,6 +977,11 @@ ThreadLocal 对象获取当前线程信息
 
 
 
+## 新增菜品分类
+
+
+
+<img src="README.assets/image-20230101150510103.png" alt="image-20230101150510103" style="zoom:50%;" />
 
 
 
@@ -1006,6 +997,7 @@ ThreadLocal 对象获取当前线程信息
 
 
 
+<img src="README.assets/image-20230101151624929.png" alt="image-20230101151624929" style="zoom:50%;" />
 
 
 
@@ -1017,15 +1009,11 @@ ThreadLocal 对象获取当前线程信息
 
 
 
+## 菜品分页查询
 
 
 
 
-
-
-
-
-## 菜品分类功能
 
 
 
